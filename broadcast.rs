@@ -35,7 +35,7 @@ use burn::{prelude::Backend, tensor::Tensor};
 ///     let (a, b) = broadcast!(a:Tensor<B, 3>, b:Tensor<2>);
 ///
 ///     let a_add_b = a.add(b);
-/// 
+///
 /// // Output:
 /// // Tensor {
 /// //   data:
@@ -55,28 +55,28 @@ use burn::{prelude::Backend, tensor::Tensor};
 #[macro_export]
 macro_rules! broadcast {
     (
-        $a:ident : Tensor<$backend1:ty, $dims1:tt>,
+        $a:ident : Tensor<$backend:ty, $dims1:tt>,
         $b:ident : Tensor<$dims2:tt>
     ) => {{
-        use $crate::ops::broadcast_op;
+        use $crate::broadcast::broadcast_op;
         const fn max(a: usize, b: usize) -> usize {
             if a > b { a } else { b }
         }
-    
+
         const N: usize = max($dims1, $dims2);
 
-        broadcast_op::<$backend1, N, $dims1, $dims2>($a, $b)
+        broadcast_op::<$backend, N, $dims1, $dims2>(&$a, &$b)
     }};
 }
 
 pub fn broadcast_op<B: Backend, const N: usize, const DA: usize, const DB: usize>(
-    a: Tensor<B, DA>,
-    b: Tensor<B, DB>,
+    a: &Tensor<B, DA>,
+    b: &Tensor<B, DB>,
 ) -> (Tensor<B, N>, Tensor<B, N>) {
     // pad left with 1s
 
-    let a = a.unsqueeze::<N>();
-    let b = b.unsqueeze::<N>();
+    let a = a.clone().unsqueeze::<N>();
+    let b = b.clone().unsqueeze::<N>();
 
     let b_shape = b.shape().dims::<N>();
 
@@ -124,8 +124,8 @@ pub fn broadcast_op<B: Backend, const N: usize, const DA: usize, const DB: usize
 
 #[cfg(test)]
 mod tests {
-    use burn::backend::ndarray::{NdArray, NdArrayDevice};
     use super::*;
+    use burn::backend::ndarray::{NdArray, NdArrayDevice};
 
     #[test]
     fn test_broadcast_multi_dims() {
@@ -156,10 +156,25 @@ mod tests {
         let b = Tensor::<B, 2>::from_data([[4, 11, 10, 5]], device);
 
         let (a, b) = broadcast!(a:Tensor<B, 3>, b:Tensor<2>);
-
         let a_add_b = a.add(b);
-        
-        println!("{a_add_b}");
+
+        Tensor::<B, 3>::from_data(
+            [
+                [
+                    [6.0, 19.0, 17.0, 7.0],
+                    [13.0, 25.0, 23.0, 17.0],
+                    [13.0, 25.0, 23.0, 17.0],
+                ],
+                [
+                    [6.0, 19.0, 17.0, 7.0],
+                    [13.0, 25.0, 23.0, 17.0],
+                    [13.0, 25.0, 23.0, 17.0],
+                ],
+            ],
+            device,
+        )
+        .into_data()
+        .assert_eq(&a_add_b.to_data(), true);
     }
 
     #[test]
@@ -168,13 +183,10 @@ mod tests {
         type B = NdArray<f32>;
 
         let a = Tensor::<B, 1>::from_data([3.0, 2.0, 6.0, 3.0], device);
-
         let b = Tensor::<B, 1>::from_data([1.0, 0.5, 4.0, 7.0], device);
-
         let a = a.reshape([-1, 1]);
 
         let (a, b) = broadcast!(a:Tensor<B, 2>, b:Tensor<1>);
-
         let max_a_b = a.max_pair(b);
 
         Tensor::<B, 2>::from_data(
@@ -196,9 +208,7 @@ mod tests {
         type B = NdArray<f32>;
 
         let a = Tensor::<B, 1>::from_data([1.1, 2.2, 3.3], device);
-
         let b = Tensor::<B, 1>::from_data([4.0, 5.0, 6.0, 7.0], device);
-
         let a = a.reshape([-1, 1]);
 
         let (a, b) = broadcast!(a:Tensor<B, 2>, b:Tensor<1>);
@@ -241,13 +251,10 @@ mod tests {
         type B = NdArray<f32>;
 
         let a = Tensor::<B, 1>::from_data([3.0, 2.0, 6.0, 3.0], device);
-
         let b = Tensor::<B, 1>::from_data([1.0, 0.5, 4.0, 7.0, 8.0], device);
 
         let b = b.reshape([-1, 1]);
-
         let (a, b) = broadcast!(a:Tensor<B, 1>, b:Tensor<2>);
-
         let max_a_b = a.max_pair(b);
 
         Tensor::<B, 2>::from_data(
